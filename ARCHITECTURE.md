@@ -429,7 +429,7 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
 ## Project Structure Details
 
 ```
-weather-backend-v2/
+weather-backend/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                            # FastAPI app initialization

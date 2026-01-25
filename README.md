@@ -14,7 +14,7 @@ A scalable FastAPI-based weather data management system with clean architecture.
 ## Project Structure
 
 ```
-weather-backend-v2/
+weather-backend/
 ├── app/
 │   ├── main.py                        # FastAPI app entry point
 │   ├── core/
