@@ -28,23 +28,31 @@ This project follows a **layered architecture** pattern with clear separation of
 │  - Transaction management                                    │
 │  - Domain rules enforcement                                  │
 │  Files: app/services/*.py                                    │
-└──────────────────────────┬──────────────────────────────────┘
+└─────────┬────────────────┴────────────────┬─────────────────┘
+          │                                 │
+          │                  ┌──────────────▼──────────────┐
+          │                  │   Machine Learning Layer    │
+          │                  │  - Data preprocessing       │
+          │                  │  - Feature engineering      │
+          │                  │  - Model inference          │
+          │                  │  Files: app/machine_learning│
+          │                  └─────────────────────────────┘
+          │
+┌─────────▼─────────────────────────────────────────────────┐
+│                   Repository Layer                         │
+│  - Data access abstraction                                 │
+│  - Query building                                          │
+│  - CRUD operations                                         │
+│  - Database-specific logic                                 │
+│  Files: app/repositories/*.py                              │
+└──────────────────────────┬────────────────────────────────┘
                            │
-┌──────────────────────────▼──────────────────────────────────┐
-│                   Repository Layer                           │
-│  - Data access abstraction                                   │
-│  - Query building                                            │
-│  - CRUD operations                                           │
-│  - Database-specific logic                                   │
-│  Files: app/repositories/*.py                                │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                    Database Layer                            │
-│  - SQLAlchemy ORM                                            │
-│  - MySQL 8.0                                                 │
-│  Files: app/models/*.py                                      │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────▼────────────────────────────────┐
+│                    Database Layer                          │
+│  - SQLAlchemy ORM                                          │
+│  - MySQL 8.0                                               │
+│  Files: app/models/*.py                                    │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ## Layer Responsibilities
@@ -219,6 +227,72 @@ class JobResponse(BaseModel):
 
 ---
 
+### 6. Machine Learning Layer (`app/machine_learning/`)
+
+**Purpose**: Handle data preprocessing and ML model predictions
+
+**Responsibilities**:
+- Data aggregation and transformation
+- Feature engineering
+- Model loading and inference
+- Prediction logic
+
+**Example**:
+```python
+# app/machine_learning/preprocessing.py
+def aggregate_daily_to_monthly(daily_records):
+    """Aggregate daily weather data to monthly statistics"""
+    # Aggregation logic
+    return monthly_data
+
+def prepare_features(monthly_data):
+    """Prepare features for model input"""
+    return feature_matrix
+
+# app/machine_learning/prediction.py
+import pickle
+
+def load_model(model_path):
+    """Load trained forecast model"""
+    with open(model_path, 'rb') as f:
+        return pickle.load(f)
+
+def predict_forecast(features, model):
+    """Generate weather forecast predictions"""
+    return model.predict(features)
+```
+
+**Usage in Service Layer**:
+```python
+from app.machine_learning.preprocessing import aggregate_daily_to_monthly
+from app.machine_learning.prediction import load_model, predict_forecast
+
+class ForecastService:
+    def generate_forecast(self, db, request):
+        # Fetch data from repository
+        daily_data = self.weather_daily_repository.get_by_filters(...)
+
+        # Preprocess using ML layer
+        monthly_data = aggregate_daily_to_monthly(daily_data)
+
+        # Predict using ML layer
+        model = load_model('app/machine_learning/models/forecast.pkl')
+        predictions = predict_forecast(monthly_data, model)
+
+        # Store results via repository
+        self.forecast_repository.create(...)
+```
+
+**Key Principles**:
+- ✅ Pure functions (no database access)
+- ✅ Reusable ML logic
+- ✅ Separate from business logic (services orchestrate)
+- ✅ Store trained models in `models/` directory
+- ❌ No direct API access
+- ❌ No database queries
+
+---
+
 ## Data Flow
 
 ### Request Flow (Create Operation)
@@ -346,62 +420,63 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
 weather-backend-v2/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                     # FastAPI app initialization
+│   ├── main.py                            # FastAPI app initialization
 │   │
-│   ├── core/                       # Core functionality
+│   ├── core/                              # Core functionality
 │   │   ├── __init__.py
-│   │   ├── config.py              # Settings management (Pydantic)
-│   │   └── database.py            # Database connection & session
+│   │   ├── config.py                      # Settings management (Pydantic)
+│   │   └── database.py                    # Database connection & session
 │   │
-│   ├── api/                        # API layer
+│   ├── api/                               # API layer
 │   │   ├── __init__.py
-│   │   └── v1/                    # API version 1
+│   │   └── v1/                            # API version 1
 │   │       ├── __init__.py
-│   │       ├── router.py          # Aggregate all v1 routes
-│   │       └── endpoints/         # Individual route modules
+│   │       ├── router.py                  # Aggregate all v1 routes
+│   │       └── endpoints/                 # Individual route modules
 │   │           ├── __init__.py
-│   │           ├── jobs.py
-│   │           ├── weather_daily.py
-│   │           ├── weather_monthly.py
-│   │           └── forecast_monthly.py
+│   │           └── forecast.py            # Forecast generation endpoint
 │   │
-│   ├── models/                     # SQLAlchemy models (Database layer)
+│   ├── models/                            # SQLAlchemy models (Database layer)
 │   │   ├── __init__.py
 │   │   ├── job.py
-│   │   ├── weather_daily.py
-│   │   ├── weather_monthly.py
-│   │   └── forecast_monthly.py
+│   │   ├── weather_daily_record.py
+│   │   ├── weather_monthly_resutls.py
+│   │   └── forecast_monthly_record.py
 │   │
-│   ├── schemas/                    # Pydantic schemas (Validation layer)
+│   ├── schemas/                           # Pydantic schemas (Validation layer)
 │   │   ├── __init__.py
+│   │   ├── forecast.py                    # Forecast request/response schemas
+│   │   ├── forecast_monthly.py
 │   │   ├── job.py
 │   │   ├── weather_daily.py
-│   │   ├── weather_monthly.py
-│   │   └── forecast_monthly.py
+│   │   └── weather_monthly.py
 │   │
-│   ├── repositories/               # Data access layer
+│   ├── repositories/                      # Data access layer
 │   │   ├── __init__.py
-│   │   ├── base.py                # BaseRepository with CRUD
+│   │   ├── base.py                        # BaseRepository with CRUD
 │   │   ├── job.py
-│   │   ├── weather_daily.py
-│   │   ├── weather_monthly.py
-│   │   └── forecast_monthly.py
+│   │   ├── weather_daily_record.py
+│   │   ├── weather_monthly_record.py
+│   │   └── forecast_monthly_result.py
 │   │
-│   └── services/                   # Business logic layer
+│   ├── machine_learning/                  # Machine learning layer
+│   │   ├── __init__.py
+│   │   ├── preprocessing.py               # Data preprocessing functions
+│   │   └── prediction.py                  # Model prediction functions
+│   │
+│   └── services/                          # Business logic layer
 │       ├── __init__.py
-│       ├── job.py
-│       ├── weather_daily.py
-│       ├── weather_monthly.py
-│       └── forecast_monthly.py
+│       └── forecast.py                    # Forecast generation service
 │
-├── tests/                          # Test directory
-├── alembic/                        # Database migrations
-├── requirements.txt                # Python dependencies
-├── .env                            # Environment variables (not in git)
-├── .env.example                    # Environment template
-├── .gitignore                      # Git ignore rules
-├── README.md                       # Project documentation
-└── ARCHITECTURE.md                 # This file
+├── tests/                                 # Test directory
+├── alembic/                               # Database migrations
+├── Makefile                               # Make commands (run, dev, etc.)
+├── requirements.txt                       # Python dependencies
+├── .env                                   # Environment variables (not in git)
+├── .env.example                           # Environment template
+├── .gitignore                             # Git ignore rules
+├── README.md                              # Project documentation
+└── ARCHITECTURE.md                        # This file
 ```
 
 ---

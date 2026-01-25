@@ -1,4 +1,4 @@
-# Weather Backend API v2
+# Weather Backend API
 
 A scalable FastAPI-based weather data management system with clean architecture.
 
@@ -14,7 +14,7 @@ A scalable FastAPI-based weather data management system with clean architecture.
 ## Project Structure
 
 ```
-weather-backend-v2/
+weather-backend/
 ├── app/
 │   ├── main.py                 # FastAPI app entry point
 │   ├── core/
@@ -26,7 +26,8 @@ weather-backend-v2/
 │   ├── models/                # SQLAlchemy models
 │   ├── schemas/               # Pydantic schemas
 │   ├── repositories/          # Data access layer
-│   └── services/              # Business logic layer
+│   ├── services/              # Business logic layer
+│   └── machine_learning/      # ML preprocessing & prediction
 ├── requirements.txt
 └── .env
 ```
