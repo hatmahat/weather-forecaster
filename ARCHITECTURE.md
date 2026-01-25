@@ -429,7 +429,7 @@ def get_job(job_id: int, db: Session = Depends(get_db)):
 ## Project Structure Details
 
 ```
-weather-backend/
+weather-forecaster/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                            # FastAPI app initialization
@@ -503,7 +503,7 @@ weather-backend/
 
 ```bash
 # Application
-APP_NAME=Weather Backend API
+APP_NAME=Weather Forecaster API
 APP_VERSION=1.0.0
 DEBUG=False
 
@@ -520,7 +520,7 @@ Uses `pydantic-settings` for type-safe configuration:
 
 ```python
 class Settings(BaseSettings):
-    APP_NAME: str = "Weather Backend API"
+    APP_NAME: str = "Weather Forecaster API"
     DATABASE_URL: str
     CORS_ORIGINS: list[str] = ["*"]
 

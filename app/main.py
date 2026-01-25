@@ -26,7 +26,7 @@ app.include_router(api_router, prefix="/api/v1")
 def root():
     """Root endpoint"""
     return {
-        "message": "Weather Backend API",
+        "message": "Weather Forecaster API",
         "version": settings.APP_VERSION,
         "docs": "/docs",
     }

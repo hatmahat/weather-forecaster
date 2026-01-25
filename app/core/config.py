@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "Weather Backend API"
+    APP_NAME: str = "Weather Forecaster API"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 
