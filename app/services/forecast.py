@@ -4,6 +4,7 @@ from app.repositories.job import job_repository
 from app.repositories.weather_daily_record import weather_daily_repository
 from app.repositories.weather_monthly_record import weather_monthly_repository
 from app.repositories.forecast_monthly_result import forecast_monthly_repository
+from app.models.job import JobStatus
 
 
 class ForecastService:
@@ -45,23 +46,38 @@ class ForecastService:
         5. Update job metadata (status: SUCCESS or FAILED)
         """
 
-        # TODO: Implement the forecast generation logic
-        # Step 1: Update job status to IN_PROGRESS
+        try:
+            # Step 1: Update job status to IN_PROGRESS
+            job = self.job_repository.update_status(
+                db, request.run_id, JobStatus.IN_PROGRESS
+            )
+            if not job:
+                raise ValueError(f"Job with run_id {request.run_id} not found")
 
-        # Step 2: Fetch daily weather data
+            # Step 2: Fetch daily weather data
+            # TODO: Implement fetching daily data
 
-        # Step 3: Aggregate to monthly and store
+            # Step 3: Aggregate to monthly and store
+            # TODO: Implement aggregation logic
 
-        # Step 4: Run forecasting and store results
+            # Step 4: Run forecasting and store results
+            # TODO: Implement forecasting logic
 
-        # Step 5: Update job status to SUCCESS
+            # Step 5: Update job status to SUCCESS
+            self.job_repository.update_status(db, request.run_id, JobStatus.SUCCESS)
 
-        # Placeholder response
-        return ForecastResponse(
-            run_id=request.run_id,
-            status="SUCCESS",
-            message="Forecast generation completed successfully"
-        )
+            return ForecastResponse(
+                run_id=request.run_id,
+                status="SUCCESS",
+                message="Forecast generation completed successfully"
+            )
+
+        except Exception as e:
+            # Update job status to FAILED on error
+            self.job_repository.update_status(
+                db, request.run_id, JobStatus.FAILED, error=str(e)
+            )
+            raise
 
 
 forecast_service = ForecastService()

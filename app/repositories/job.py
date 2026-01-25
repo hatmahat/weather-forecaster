@@ -35,5 +35,22 @@ class JobRepository(BaseRepository[Job]):
             .all()
         )
 
+    def update_status(
+        self, db: Session, run_id: str, status: JobStatus, error: Optional[str] = None
+    ) -> Optional[Job]:
+        """Update job status by run_id"""
+        job = self.get_by_run_id(db, run_id)
+        if not job:
+            return None
+
+        job.status = status
+        if error:
+            job.error = error
+
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        return job
+
 
 job_repository = JobRepository()
