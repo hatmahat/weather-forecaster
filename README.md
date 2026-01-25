@@ -49,36 +49,35 @@ weather-backend-v2/
    uvicorn app.main:app --reload
    ```
 
-4. **Access API documentation:**
-   - Swagger UI: http://localhost:8000/docs
-   - ReDoc: http://localhost:8000/redoc
+4. **Open Swagger UI:**
+
+   Visit http://localhost:8000/docs in your browser to explore and test all API endpoints interactively.
+
+   Alternative: http://localhost:8000/redoc for ReDoc documentation.
 
 ## API Endpoints
 
-### Jobs
-- `POST /api/v1/jobs` - Create job
-- `GET /api/v1/jobs/{job_id}` - Get job by ID
-- `GET /api/v1/jobs/run/{run_id}` - Get job by run_id
-- `GET /api/v1/jobs` - List jobs (with status filter)
-- `PATCH /api/v1/jobs/{job_id}` - Update job
+### Core Endpoints
+- `GET /` - Root endpoint (API info)
+- `GET /health` - Health check
 
-### Weather Daily Records
-- `POST /api/v1/weather-daily` - Create record
-- `POST /api/v1/weather-daily/bulk` - Bulk create
-- `GET /api/v1/weather-daily/{record_id}` - Get record
-- `GET /api/v1/weather-daily` - List records (with filters)
-
-### Weather Monthly Records
-- `POST /api/v1/weather-monthly` - Create record
-- `POST /api/v1/weather-monthly/bulk` - Bulk create
-- `GET /api/v1/weather-monthly/{record_id}` - Get record
-- `GET /api/v1/weather-monthly` - List records (with filters)
-
-### Forecast Monthly Results
-- `POST /api/v1/forecast-monthly` - Create result
-- `POST /api/v1/forecast-monthly/bulk` - Bulk create
-- `GET /api/v1/forecast-monthly/{result_id}` - Get result
-- `GET /api/v1/forecast-monthly` - List results (with filters)
+### Forecast Generation
+- `POST /api/v1/forecast` - Trigger forecast generation workflow
+  - **Request Body:**
+    ```json
+    {
+      "run_id": "uuid-string",
+      "trigger_user_id": 123
+    }
+    ```
+  - **Response:**
+    ```json
+    {
+      "run_id": "uuid-string",
+      "status": "SUCCESS",
+      "message": "Forecast generation completed successfully"
+    }
+    ```
 
 ## Database Schema
 
