@@ -239,45 +239,57 @@ class JobResponse(BaseModel):
 
 **Example**:
 ```python
-# app/machine_learning/preprocessing.py
+# app/machine_learning/preprocessing/cleaning.py
+def clean_weather_data(raw_data):
+    """Clean and validate weather data"""
+    # Remove outliers, handle missing values
+    return cleaned_data
+
 def aggregate_daily_to_monthly(daily_records):
     """Aggregate daily weather data to monthly statistics"""
     # Aggregation logic
     return monthly_data
 
-def prepare_features(monthly_data):
-    """Prepare features for model input"""
-    return feature_matrix
-
-# app/machine_learning/prediction.py
+# app/machine_learning/forecasting/model_manager.py
 import pickle
 
-def load_model(model_path):
-    """Load trained forecast model"""
-    with open(model_path, 'rb') as f:
-        return pickle.load(f)
+class ModelManager:
+    def __init__(self, model_path):
+        self.model_path = model_path
+        self.model = None
 
-def predict_forecast(features, model):
-    """Generate weather forecast predictions"""
-    return model.predict(features)
+    def load_model(self):
+        """Load trained forecast model"""
+        with open(self.model_path, 'rb') as f:
+            self.model = pickle.load(f)
+        return self.model
+
+    def predict(self, features):
+        """Generate weather forecast predictions"""
+        if not self.model:
+            self.load_model()
+        return self.model.predict(features)
 ```
 
 **Usage in Service Layer**:
 ```python
-from app.machine_learning.preprocessing import aggregate_daily_to_monthly
-from app.machine_learning.prediction import load_model, predict_forecast
+from app.machine_learning.preprocessing.cleaning import clean_weather_data, aggregate_daily_to_monthly
+from app.machine_learning.forecasting.model_manager import ModelManager
 
 class ForecastService:
+    def __init__(self):
+        self.model_manager = ModelManager('models/forecast.pkl')
+
     def generate_forecast(self, db, request):
         # Fetch data from repository
         daily_data = self.weather_daily_repository.get_by_filters(...)
 
         # Preprocess using ML layer
-        monthly_data = aggregate_daily_to_monthly(daily_data)
+        cleaned_data = clean_weather_data(daily_data)
+        monthly_data = aggregate_daily_to_monthly(cleaned_data)
 
         # Predict using ML layer
-        model = load_model('app/machine_learning/models/forecast.pkl')
-        predictions = predict_forecast(monthly_data, model)
+        predictions = self.model_manager.predict(monthly_data)
 
         # Store results via repository
         self.forecast_repository.create(...)
@@ -461,8 +473,12 @@ weather-backend-v2/
 │   │
 │   ├── machine_learning/                  # Machine learning layer
 │   │   ├── __init__.py
-│   │   ├── preprocessing.py               # Data preprocessing functions
-│   │   └── prediction.py                  # Model prediction functions
+│   │   ├── preprocessing/                 # Data preprocessing package
+│   │   │   ├── __init__.py
+│   │   │   └── cleaning.py               # Data cleaning functions
+│   │   └── forecasting/                   # Forecasting package
+│   │       ├── __init__.py
+│   │       └── model_manager.py          # Model loading & inference
 │   │
 │   └── services/                          # Business logic layer
 │       ├── __init__.py

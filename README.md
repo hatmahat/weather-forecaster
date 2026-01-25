@@ -14,20 +14,41 @@ A scalable FastAPI-based weather data management system with clean architecture.
 ## Project Structure
 
 ```
-weather-backend/
+weather-backend-v2/
 ├── app/
-│   ├── main.py                 # FastAPI app entry point
+│   ├── main.py                        # FastAPI app entry point
 │   ├── core/
-│   │   ├── config.py          # Settings, env vars
-│   │   └── database.py        # DB connection
+│   │   ├── config.py                  # Settings, env vars
+│   │   └── database.py                # DB connection
 │   ├── api/v1/
-│   │   ├── router.py          # API router
-│   │   └── endpoints/         # API endpoints
-│   ├── models/                # SQLAlchemy models
-│   ├── schemas/               # Pydantic schemas
-│   ├── repositories/          # Data access layer
-│   ├── services/              # Business logic layer
-│   └── machine_learning/      # ML preprocessing & prediction
+│   │   ├── router.py                  # API router
+│   │   └── endpoints/
+│   │       └── forecast.py            # Forecast endpoint
+│   ├── models/                        # SQLAlchemy models
+│   │   ├── job.py
+│   │   ├── weather_daily_record.py
+│   │   ├── weather_monthly_resutls.py
+│   │   └── forecast_monthly_record.py
+│   ├── schemas/                       # Pydantic schemas
+│   │   ├── forecast.py
+│   │   ├── forecast_monthly.py
+│   │   ├── job.py
+│   │   ├── weather_daily.py
+│   │   └── weather_monthly.py
+│   ├── repositories/                  # Data access layer
+│   │   ├── base.py
+│   │   ├── job.py
+│   │   ├── weather_daily_record.py
+│   │   ├── weather_monthly_record.py
+│   │   └── forecast_monthly_result.py
+│   ├── services/                      # Business logic layer
+│   │   └── forecast.py
+│   └── machine_learning/              # ML layer
+│       ├── preprocessing/
+│       │   └── cleaning.py
+│       └── forecasting/
+│           └── model_manager.py
+├── Makefile
 ├── requirements.txt
 └── .env
 ```
