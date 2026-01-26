@@ -50,5 +50,9 @@ class WeatherDailyRecordRepository(BaseRepository[WeatherDailyRecord]):
             .first()
         )
 
+    def get_all_for_aggregation(self, db: Session) -> List[WeatherDailyRecord]:
+        """Get all weather daily records for aggregation (no limit)"""
+        return db.query(WeatherDailyRecord).all()
+
 
 weather_daily_repository = WeatherDailyRecordRepository()

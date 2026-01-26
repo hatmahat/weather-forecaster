@@ -5,6 +5,7 @@ from app.repositories.weather_daily_record import weather_daily_repository
 from app.repositories.weather_monthly_record import weather_monthly_repository
 from app.repositories.forecast_monthly_result import forecast_monthly_repository
 from app.models.job import JobStatus
+from app.machine_learning.preprocessing.aggregation import aggregate_daily_to_monthly
 
 
 class ForecastService:
@@ -55,10 +56,33 @@ class ForecastService:
                 raise ValueError(f"Job with run_id {request.run_id} not found")
 
             # Step 2: Fetch daily weather data
-            # TODO: Implement fetching daily data
+            daily_records = self.weather_daily_repository.get_all_for_aggregation(db)
+
+            if not daily_records:
+                raise ValueError("No daily weather records found for aggregation")
+
+            # Convert SQLAlchemy models to dictionaries for processing
+            daily_data = [
+                {
+                    'site': record.site,
+                    'pit': record.pit,
+                    'date': record.date,
+                    'duration': record.duration,
+                    'frequency': record.frequency,
+                    'rainfall': record.rainfall
+                }
+                for record in daily_records
+            ]
 
             # Step 3: Aggregate to monthly and store
-            # TODO: Implement aggregation logic
+            monthly_data = aggregate_daily_to_monthly(daily_data, request.run_id)
+
+            if not monthly_data:
+                raise ValueError("Failed to aggregate daily data to monthly records")
+
+            # Store monthly aggregated data
+            for monthly_record in monthly_data:
+                self.weather_monthly_repository.create(db, obj_in=monthly_record)
 
             # Step 4: Run forecasting and store results
             # TODO: Implement forecasting logic
