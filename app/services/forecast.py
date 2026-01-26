@@ -54,6 +54,9 @@ class ForecastService:
         5. Update job status to SUCCESS or FAILED
         """
 
+        # Extract selected models from request
+        selected_models = [model.value for model in request.models] if request.models else ["XGBoost"]
+
         # Step 1: Update job status to IN_PROGRESS
         job = self.job_repository.update_status(
             db, request.run_id, JobStatus.IN_PROGRESS
@@ -107,14 +110,28 @@ class ForecastService:
             # Predict for all sites (in-memory processing)
             sites = list(site_dataframes.keys())
             targets = ['Rainfall mm', 'Rain duration', 'Rain freq']
-            
-            predictions = predict_all_sites(
-                monthly_data_by_site=site_dataframes,
-                sites=sites,
-                targets=targets,
-                forecast_periods=12,
-                models_dir="models"
-            )
+
+            predictions = []
+            successful_models = []
+            for model_type in selected_models:
+                try:
+                    prediction = predict_all_sites(
+                        monthly_data_by_site=site_dataframes,
+                        sites=sites,
+                        targets=targets,
+                        forecast_periods=None,  # Will predict remaining months of current year
+                        models_dir="models",
+                        model_type=model_type
+                    )
+
+                    if prediction: 
+                        predictions.extend(prediction)
+                        successful_models.append(model_type)
+                    else: 
+                        print(f"No predictions generated for model {model_type}")
+                except Exception as model_error:
+                    print(f"Error during prediction with model {model_type}: {model_error}")
+                    continue
 
             # Validate predictions
             if not predictions:
@@ -164,7 +181,7 @@ class ForecastService:
                     run_id=request.run_id,
                     status="SUCCESS",
                     message=f"Forecast generation completed successfully. "
-                           f"Stored {monthly_stored} monthly records and {forecast_stored} forecast records."
+                           f"Stored {monthly_stored} monthly records and {forecast_stored} forecast records. Models used: {', '.join(successful_models)}"
                 )
 
             except SQLAlchemyError as db_error:
