@@ -54,5 +54,11 @@ class ForecastMonthlyResultRepository(BaseRepository[ForecastMonthlyResult]):
             .first()
         )
 
+    def delete_by_run_id(self, db: Session, run_id: str) -> int:
+        """Delete records by run_id, return number of deleted records"""
+        deleted = db.query(self.model).filter(self.model.run_id == run_id).delete()
+        db.commit()
+        return deleted
+
 
 forecast_monthly_repository = ForecastMonthlyResultRepository()

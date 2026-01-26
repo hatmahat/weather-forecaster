@@ -9,6 +9,7 @@ class WeatherMonthlyRecord(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True)
     created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
     run_id = Column(String(36), ForeignKey("jobs.run_id"), nullable=False, index=True)
+    site = Column(String(50), nullable=False, index=True)
     year = Column(SmallInteger, nullable=False, index=True)
     month = Column(SmallInteger, nullable=False, index=True)
     rainfall_mm = Column(Numeric, nullable=False)
@@ -19,6 +20,7 @@ class WeatherMonthlyRecord(Base):
     max_rain_duration = Column(Numeric, nullable=False)
 
     __table_args__ = (
-        Index('weather_monthly_records_index_0', 'run_id', 'year', 'month', unique=True),
+        Index('weather_monthly_records_index_0', 'run_id', 'site', 'year', 'month', unique=True),
         Index('weather_monthly_records_index_time', 'year', 'month'),
+        Index('weather_monthly_records_index_site', 'site', 'year', 'month'),
     )

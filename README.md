@@ -88,8 +88,7 @@ weather-forecaster/
   - **Request Body:**
     ```json
     {
-      "run_id": "uuid-string",
-      "trigger_user_id": 123
+      "run_id": "uuid-string"
     }
     ```
   - **Response:**

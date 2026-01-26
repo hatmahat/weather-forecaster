@@ -206,7 +206,6 @@ class Job(Base):
 class JobCreate(BaseModel):
     trigger_type: str
     job_type: str
-    trigger_user_id: Optional[int] = None
     job_metadata: Optional[dict] = None
 
 class JobResponse(BaseModel):

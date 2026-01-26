@@ -45,6 +45,7 @@ def aggregate_daily_to_monthly(daily_records: List[Dict], run_id: str) -> List[D
 
             monthly_results.append({
                 'run_id': run_id,
+                'site': site,  # Add site field
                 'year': year,
                 'month': month,
                 'rainfall_mm': avg_rainfall,

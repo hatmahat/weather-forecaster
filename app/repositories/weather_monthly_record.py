@@ -45,6 +45,15 @@ class WeatherMonthlyRecordRepository(BaseRepository[WeatherMonthlyRecord]):
             )
             .first()
         )
+    
+    def delete_by_run_id(
+        self, db: Session, run_id: str
+    ) -> None:
+        """Delete weather monthly records by run_id"""
+        db.query(WeatherMonthlyRecord).filter(
+            WeatherMonthlyRecord.run_id == run_id
+        ).delete()
+        db.commit()
 
 
 weather_monthly_repository = WeatherMonthlyRecordRepository()

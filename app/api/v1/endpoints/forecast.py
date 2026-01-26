@@ -23,7 +23,7 @@ def trigger_forecast(
     5. Stores results and updates job status
 
     Args:
-        request: ForecastRequest containing run_id and optional trigger_user_id
+        request: ForecastRequest containing run_id
         db: Database session (injected)
 
     Returns:
