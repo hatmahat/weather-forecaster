@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = ["*"]
 
+    # Logging
+    LOG_LEVEL: str = "INFO"
+    JSON_LOGS: bool = False
+    LOG_FILE: str = None
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]

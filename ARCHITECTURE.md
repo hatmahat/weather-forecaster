@@ -451,7 +451,7 @@ weather-forecaster/
 │   │   ├── __init__.py
 │   │   ├── job.py
 │   │   ├── weather_daily_record.py
-│   │   ├── weather_monthly_resutls.py
+│   │   ├── weather_monthly_results.py
 │   │   └── forecast_monthly_record.py
 │   │
 │   ├── schemas/                           # Pydantic schemas (Validation layer)

@@ -6,13 +6,14 @@ from decimal import Decimal
 
 class WeatherMonthlyRecordBase(BaseModel):
     run_id: str
+    site: str
     year: int
     month: int
     rainfall_mm: Decimal
-    max_rainfall_mm: Decimal
     rain_frequency: Decimal
-    max_rain_frequency: Decimal
     rain_duration: Decimal
+    max_rainfall_mm: Decimal
+    max_rain_frequency: Decimal
     max_rain_duration: Decimal
 
 

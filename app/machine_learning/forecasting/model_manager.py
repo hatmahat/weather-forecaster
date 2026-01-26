@@ -9,7 +9,10 @@ from typing import Dict, List, Tuple
 from pathlib import Path
 from datetime import datetime
 from darts import TimeSeries
-from darts.dataprocessing.transformers import Scaler
+from app.core.logging import get_logger
+from app.core.exceptions import ModelNotFoundError, PredictionError
+
+logger = get_logger(__name__)
 
 
 class ModelManager:
@@ -49,10 +52,16 @@ class ModelManager:
         model_path = self.models_dir / f"{model_type}_pipeline_{site}_{target}.pkl"
 
         if not model_path.exists():
-            raise FileNotFoundError(
-                f"Model file not found: {model_path}. "
-                f"Please ensure model is trained for site={site}, target={target}"
+            logger.error(
+                f"Model file not found",
+                extra={"site": site, "target": target, "model": model_type}
             )
+            raise ModelNotFoundError(site=site, target=target, model_type=model_type)
+
+        logger.info(
+            f"Loading model for site {site}, target {target}",
+            extra={"site": site, "model": model_type}
+        )
 
         with open(model_path, "rb") as f:
             pipeline = pickle.load(f)
@@ -63,6 +72,11 @@ class ModelManager:
 
         # Cache for future use
         self.loaded_models[cache_key] = (model, scaler, metadata)
+
+        logger.info(
+            f"Model loaded successfully for site {site}, target {target}",
+            extra={"site": site, "model": model_type}
+        )
 
         return model, scaler, metadata
 
@@ -114,9 +128,6 @@ class ModelManager:
             fill_missing_dates=True,
             freq="MS"  # Month start frequency
         )
-
-        # Scale the data
-        series_scaled = scaler.transform(series)
 
         # Make prediction
         forecast_scaled = model.predict(n=forecast_periods)
@@ -190,13 +201,29 @@ def predict_all_sites(
                         'prediction': float(row['prediction'])
                     })
 
-            except FileNotFoundError as e:
+                logger.info(
+                    f"Predictions generated for site {site}, target {target}",
+                    extra={
+                        "site": site,
+                        "model": model_type,
+                        "prediction_count": len(predictions)
+                    }
+                )
+
+            except ModelNotFoundError as e:
                 # Log warning and continue with other sites/targets
-                print(f"Warning: {e}")
+                logger.warning(
+                    f"Model file not found for site {site}, target {target}",
+                    extra={"site": site, "model": model_type}
+                )
                 continue
             except Exception as e:
                 # Log error and continue
-                print(f"Error predicting {site} - {target}: {e}")
+                logger.error(
+                    f"Prediction failed for {site} - {target}",
+                    extra={"site": site, "model": model_type},
+                    exc_info=True
+                )
                 continue
 
     return all_predictions

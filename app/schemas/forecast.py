@@ -15,7 +15,7 @@ class ForecastRequest(BaseModel):
     run_id: str
     models: List[ModelType] = Field(
         default=[ModelType.ARIMA, ModelType.TCN, ModelType.TFT, ModelType.XGBOOST],
-        description="List of models to use for forecasting. Defaults to XGBoost only."
+        description="List of models to use for forecasting. Defaults to all available models."
     )
 
 

@@ -1,5 +1,4 @@
 from typing import List, Dict, Optional
-from datetime import datetime
 from collections import defaultdict
 from decimal import Decimal
 
@@ -45,7 +44,7 @@ def aggregate_daily_to_monthly(daily_records: List[Dict], run_id: str) -> List[D
 
             monthly_results.append({
                 'run_id': run_id,
-                'site': site,  # Add site field
+                'site': site,
                 'year': year,
                 'month': month,
                 'rainfall_mm': avg_rainfall,
@@ -179,6 +178,11 @@ def fill_missing_months_with_historical_average(
     Returns:
         Complete monthly records with filled values
     """
+    # Get the site from existing records
+    site = monthly_records[0]['site'] if monthly_records else None
+    if not site:
+        return monthly_records
+
     # Create a set of existing (year, month) combinations
     existing_months = {(r['year'], r['month']) for r in monthly_records}
 
@@ -192,7 +196,8 @@ def fill_missing_months_with_historical_average(
                 historical_records,
                 month,
                 target_year,
-                run_id
+                run_id,
+                site
             )
 
             if avg_data:
@@ -205,7 +210,8 @@ def calculate_historical_average_for_month(
     historical_records: List[Dict],
     target_month: int,
     current_year: int,
-    run_id: str
+    run_id: str,
+    site: str
 ) -> Optional[Dict]:
     """
     Calculate average values for a specific month from last 3 years.
@@ -215,22 +221,24 @@ def calculate_historical_average_for_month(
         target_month: Month to calculate average for (1-12)
         current_year: Current year
         run_id: Job run ID
+        site: Site identifier
 
     Returns:
         Dictionary with averaged values or zeros if no historical data
     """
-    # Filter records for same month in last 3 years
+    # Filter records for same month in last 3 years for this site
     last_3_years = [current_year - 1, current_year - 2, current_year - 3]
 
     relevant_records = [
         r for r in historical_records
-        if r['month'] == target_month and r['year'] in last_3_years
+        if r['month'] == target_month and r['year'] in last_3_years and r['site'] == site
     ]
 
     if not relevant_records:
         # No historical data, return zeros
         return {
             'run_id': run_id,
+            'site': site,
             'year': current_year,
             'month': target_month,
             'rainfall_mm': Decimal('0'),
@@ -253,6 +261,7 @@ def calculate_historical_average_for_month(
 
     return {
         'run_id': run_id,
+        'site': site,
         'year': current_year,
         'month': target_month,
         'rainfall_mm': Decimal(str(round(avg_rainfall, 2))),

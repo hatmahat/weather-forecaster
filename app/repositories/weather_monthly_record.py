@@ -2,7 +2,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from app.repositories.base import BaseRepository
-from app.models.weather_monthly_resutls import WeatherMonthlyRecord
+from app.models.weather_monthly_results import WeatherMonthlyRecord
 
 
 class WeatherMonthlyRecordRepository(BaseRepository[WeatherMonthlyRecord]):

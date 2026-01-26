@@ -1,4 +1,4 @@
-from typing import Generic, TypeVar, Type, Optional, List, Any
+from typing import Generic, TypeVar, Type, Optional, List
 from sqlalchemy.orm import Session
 from app.core.database import Base
 
@@ -52,3 +52,13 @@ class BaseRepository(Generic[ModelType]):
     def count(self, db: Session) -> int:
         """Count total records"""
         return db.query(self.model).count()
+
+    def bulk_create(self, db: Session, *, objs_in: List[dict]) -> int:
+        """Bulk create multiple records in a single transaction"""
+        if not objs_in:
+            return 0
+
+        db_objs = [self.model(**obj_in) for obj_in in objs_in]
+        db.add_all(db_objs)
+        db.flush()  # Flush without committing - let caller control transaction
+        return len(db_objs)

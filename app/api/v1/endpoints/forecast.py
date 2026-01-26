@@ -1,13 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
+from app.core.logging import get_logger
 from app.services.forecast import forecast_service
 from app.schemas.forecast import ForecastRequest, ForecastResponse
+from app.schemas.error import ErrorResponse
 
 router = APIRouter(prefix="/forecast", tags=["forecast"])
+logger = get_logger(__name__)
 
 
-@router.post("", response_model=ForecastResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "",
+    response_model=ForecastResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {"model": ErrorResponse, "description": "Business logic error"},
+        404: {"model": ErrorResponse, "description": "Resource not found"},
+        422: {"model": ErrorResponse, "description": "Validation error"},
+        500: {"model": ErrorResponse, "description": "Internal server error"}
+    }
+)
 def trigger_forecast(
     request: ForecastRequest,
     db: Session = Depends(get_db)
@@ -28,11 +41,20 @@ def trigger_forecast(
 
     Returns:
         ForecastResponse with run_id, status, and message
+
+    Raises:
+        404: Job with run_id not found
+        400: Business logic error (no data, prediction failure, etc.)
+        500: Internal server error
     """
-    try:
-        return forecast_service.generate_forecast(db, request)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Forecast generation failed: {str(e)}"
-        )
+    logger.info(
+        "Forecast generation triggered",
+        extra={"run_id": request.run_id}
+    )
+
+    result = forecast_service.generate_forecast(db, request)
+    logger.info(
+        "Forecast generation API call completed",
+        extra={"run_id": request.run_id, "status": result.status}
+    )
+    return result
