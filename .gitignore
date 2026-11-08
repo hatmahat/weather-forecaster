@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
 build/
 develop-eggs/
 dist/
@@ -25,7 +22,11 @@ wheels/
 
 # Environment
 .env
+.env.local
 .venv
+venv*/
+env/
+ENV/
 
 # IDE
 .vscode/
@@ -45,3 +46,17 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
+
+# Data & outputs
+/data
+/output
+
+# Backup files
+*.bak
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+test-report.html
+*.html.assets/

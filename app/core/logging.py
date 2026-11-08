@@ -1,13 +1,27 @@
 """
-Production-ready logging configuration for Weather Forecaster API.
+Production-ready logging configuration.
 
 Provides structured JSON logging with proper formatting, levels, and handlers.
+
+Structured fields are passed with ``extra={...}``. Only the keys listed in
+``LOG_EXTRA_FIELDS`` are emitted by the formatters; add a key there to have it
+appear in log output.
 """
 import logging
 import sys
 from typing import Any, Dict
-from datetime import datetime
+from datetime import datetime, timezone
 import json
+
+# `extra={...}` keys that the formatters will include in log output.
+LOG_EXTRA_FIELDS = (
+    "job_id",
+    "model",
+    "duration_ms",
+    "status_code",
+    "method",
+    "path",
+)
 
 
 class JSONFormatter(logging.Formatter):
@@ -27,20 +41,9 @@ class JSONFormatter(logging.Formatter):
             log_data["exception"] = self.formatException(record.exc_info)
 
         # Add extra fields from record
-        if hasattr(record, "run_id"):
-            log_data["run_id"] = record.run_id
-        if hasattr(record, "site"):
-            log_data["site"] = record.site
-        if hasattr(record, "model"):
-            log_data["model"] = record.model
-        if hasattr(record, "duration_ms"):
-            log_data["duration_ms"] = record.duration_ms
-        if hasattr(record, "status_code"):
-            log_data["status_code"] = record.status_code
-        if hasattr(record, "method"):
-            log_data["method"] = record.method
-        if hasattr(record, "path"):
-            log_data["path"] = record.path
+        for field in LOG_EXTRA_FIELDS:
+            if hasattr(record, field):
+                log_data[field] = getattr(record, field)
 
         return json.dumps(log_data)
 
@@ -50,7 +53,7 @@ class SimpleFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         """Format log record in readable format."""
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         level = record.levelname.ljust(8)
         logger_name = record.name.ljust(30)
         message = record.getMessage()
@@ -59,14 +62,9 @@ class SimpleFormatter(logging.Formatter):
 
         # Add extra context if present
         extras = []
-        if hasattr(record, "run_id"):
-            extras.append(f"run_id={record.run_id}")
-        if hasattr(record, "site"):
-            extras.append(f"site={record.site}")
-        if hasattr(record, "model"):
-            extras.append(f"model={record.model}")
-        if hasattr(record, "duration_ms"):
-            extras.append(f"duration={record.duration_ms}ms")
+        for field in LOG_EXTRA_FIELDS:
+            if hasattr(record, field):
+                extras.append(f"{field}={getattr(record, field)}")
 
         if extras:
             log_line += f" | {' '.join(extras)}"

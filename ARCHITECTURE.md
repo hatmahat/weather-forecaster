@@ -1,725 +1,162 @@
-# Architecture Documentation
+# Architecture
 
 ## Overview
 
-This project follows a **layered architecture** pattern with clear separation of concerns, inspired by clean architecture principles and best practices from the FastAPI community.
-
-## Architecture Diagram
+A **layered architecture** for ML / data services whose heavy work runs as background jobs. Endpoints stay thin, business logic and orchestration live in services, data access is isolated in repositories, and the ML code is kept free of infrastructure so it can be tested without a database.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Client Layer                          │
-│                    (HTTP Requests/Responses)                 │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                      API Layer (Endpoints)                   │
-│  - Route handling                                            │
-│  - Request validation (Pydantic)                             │
-│  - Response formatting                                       │
-│  - HTTP status codes                                         │
-│  Files: app/api/v1/endpoints/*.py                            │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-┌──────────────────────────▼──────────────────────────────────┐
-│                     Service Layer                            │
-│  - Business logic                                            │
-│  - Data orchestration                                        │
-│  - Transaction management                                    │
-│  - Domain rules enforcement                                  │
-│  Files: app/services/*.py                                    │
-└─────────┬────────────────┴────────────────┬─────────────────┘
-          │                                 │
-          │                  ┌──────────────▼──────────────┐
-          │                  │   Machine Learning Layer    │
-          │                  │  - Data preprocessing       │
-          │                  │  - Feature engineering      │
-          │                  │  - Model inference          │
-          │                  │  Files: app/machine_learning│
-          │                  └─────────────────────────────┘
-          │
-┌─────────▼─────────────────────────────────────────────────┐
-│                   Repository Layer                         │
-│  - Data access abstraction                                 │
-│  - Query building                                          │
-│  - CRUD operations                                         │
-│  - Database-specific logic                                 │
-│  Files: app/repositories/*.py                              │
-└──────────────────────────┬────────────────────────────────┘
-                           │
-┌──────────────────────────▼────────────────────────────────┐
-│                    Database Layer                          │
-│  - SQLAlchemy ORM                                          │
-│  - MySQL 8.0                                               │
-│  Files: app/models/*.py                                    │
-└───────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      Client (HTTP)                            │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+┌───────────────────────────▼──────────────────────────────────┐
+│  API layer          app/api/v1/endpoints/                     │
+│  routes · request validation · status codes · @inject         │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+┌───────────────────────────▼──────────────────────────────────┐
+│  Service layer      app/services/                             │
+│  business logic · orchestration · job lifecycle               │
+└───────┬───────────────────┬──────────────────────┬───────────┘
+        │                   │                      │
+┌───────▼────────┐  ┌───────▼──────────┐  ┌────────▼───────────┐
+│ Repositories   │  │ ML layer         │  │ Infrastructure     │
+│ app/repos...   │  │ app/machine_     │  │ adapters           │
+│ data access    │  │ learning/        │  │ S3 · job queue ·   │
+│ (db per call)  │  │ pure functions   │  │ webhook            │
+└───────┬────────┘  └──────────────────┘  └────────────────────┘
+        │
+┌───────▼──────────────────────────────────────────────────────┐
+│  Models (SQLAlchemy) → MySQL 8                                │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-## Layer Responsibilities
+Cross-cutting: `app/core/` (config, DI container, logging, errors, decorators), `app/constants/`, `app/schemas/`.
 
-### 1. API Layer (`app/api/v1/endpoints/`)
+## Layer responsibilities
 
-**Purpose**: Handle HTTP communication
+### API (`app/api/v1/endpoints/`)
+- Define routes, validate input (Pydantic), choose status codes, delegate to a service.
+- Use `@inject` with `Depends(Provide[Container.some_service])`.
+- ❌ No business logic, no direct DB queries.
 
-**Responsibilities**:
-- Define route endpoints
-- Parse and validate incoming requests
-- Delegate business logic to services
-- Format responses
-- Handle HTTP errors and status codes
-- Dependency injection setup
+### Services (`app/services/`)
+- Business rules, orchestration across repositories / adapters / ML functions, job lifecycle.
+- Dependencies via constructor. Receive `db: Session` per call.
+- Raise typed exceptions (`AppError` subclasses), never `HTTPException`.
+- ❌ No HTTP-specific code, no raw SQLAlchemy queries.
 
-**Example**:
-```python
-@router.post("", response_model=JobResponse, status_code=status.HTTP_201_CREATED)
-def create_job(job_data: JobCreate, db: Session = Depends(get_db)):
-    """Create a new job"""
-    return job_service.create_job(db, job_data)
-```
+### Repositories (`app/repositories/`)
+- CRUD and query building, extending `BaseRepository`. Stateless: `db` is a per-method argument.
+- ❌ No business logic.
 
-**Key Principles**:
-- ✅ Keep endpoints thin - only handle HTTP concerns
-- ✅ Use dependency injection for DB sessions
-- ✅ Validate input with Pydantic schemas
-- ❌ No business logic in endpoints
-- ❌ No direct database queries
+### Models (`app/models/`) and Schemas (`app/schemas/`)
+- Models map tables (register them in `app/models/__init__.py` so Alembic sees them).
+- Schemas are the API contract: separate Create / Response shapes, validation rules.
 
----
+### ML layer (`app/machine_learning/`)
+- **Contract:** pure with respect to infrastructure. Functions receive and return in-memory data (DataFrames, arrays, loaded model objects). No DB, S3, or HTTP.
+- The service layer loads data and models, calls into this package, and persists results.
+- Stages: `preprocessing` → `feature_engineering` → `training` → `inference` → `evaluation_metrics` → `postprocessing`.
+- Share feature code between training and inference so both build identical inputs.
+- The contract is a convention, not enforced. Review for imports of `Session`, repositories, `boto3` inside this package.
 
-### 2. Service Layer (`app/services/`)
+### Infrastructure adapters (`app/infrastructure/adapters/`)
+- `S3Config`: S3 client wrapper (IAM role or explicit keys, presigned URLs, upload/download).
+- `JobQueue`: in-process sequential job queue with heartbeat thread.
+- `WebhookClient`: POSTs `?jobId=` to `WEBHOOK_URL` on completion (retries on 5xx/timeout, no retry on 4xx, never fails the job).
 
-**Purpose**: Implement business logic and orchestration
+### Core (`app/core/`)
+`config.py` (pydantic-settings), `container.py` (DI), `database.py` (engine, `get_db`), `decorators.py` (`@handle_job_status`), `logging.py`, `middleware.py`, `error_handlers.py`, `exceptions.py`.
 
-**Responsibilities**:
-- Execute business rules
-- Coordinate between multiple repositories
-- Handle complex operations
-- Transform data between layers
-- Manage transactions
-- Error handling and validation
+## Dependency injection
 
-**Example**:
-```python
-class JobService:
-    def __init__(self):
-        self.repository = job_repository
+`dependency-injector` with a single `Container` in `app/core/container.py`:
 
-    def create_job(self, db: Session, job_data: JobCreate) -> JobResponse:
-        job_dict = job_data.model_dump()
-        job_dict["run_id"] = str(uuid4())  # Business logic
-        job_dict["status"] = JobStatus.PENDING
+| Provider type | Used for |
+|---|---|
+| `Singleton` | S3 adapter, job queue, webhook client, scheduler |
+| `Object` | `session_factory` (background jobs create their own sessions) |
+| `Factory` | repositories (stateless), services (constructor injection) |
 
-        job = self.repository.create(db, obj_in=job_dict)
-        return JobResponse.model_validate(job)
-```
+Endpoint modules that use `Provide[...]` must be listed in `container.wire(...)` in `app/main.py`. There are no module-level singletons.
 
-**Key Principles**:
-- ✅ Contain all business logic
-- ✅ Use repositories for data access
-- ✅ Return Pydantic schemas
-- ✅ Can call multiple repositories
-- ❌ No HTTP-specific code
-- ❌ No direct SQLAlchemy queries
+In tests, override providers: `container.job_service.override(providers.Object(mock))` (see `tests/conftest.py`).
 
----
+## Background jobs
 
-### 3. Repository Layer (`app/repositories/`)
+Long operations are asynchronous:
 
-**Purpose**: Abstract data access and persistence
+1. `POST` creates a `jobs` row (`PENDING`), submits to the queue, returns **202** with `job_id`.
+2. The queue's worker thread runs the service method with its own DB session.
+3. `@handle_job_status` marks it `IN_PROGRESS`, then `SUCCESS` / `PARTIAL_SUCCESS` / `FAILED`, and fires the webhook.
+4. The client polls `GET /api/v1/jobs/{job_id}`.
 
-**Responsibilities**:
-- CRUD operations
-- Query building
-- Database filtering and pagination
-- Data persistence
-- Relationship handling
+On startup, jobs left `PENDING` / `IN_PROGRESS` by a previous process are marked `FAILED`. An hourly sweep fails `IN_PROGRESS` jobs whose heartbeat is older than 24 hours. Details: [docs/JOB_LIFECYCLE.md](docs/JOB_LIFECYCLE.md).
 
-**Example**:
-```python
-class JobRepository(BaseRepository[Job]):
-    def get_by_run_id(self, db: Session, run_id: str) -> Optional[Job]:
-        return db.query(Job).filter(Job.run_id == run_id).first()
+`app/services/task.py` is the reference example.
 
-    def get_by_status(self, db: Session, status: JobStatus,
-                      skip: int = 0, limit: int = 100) -> List[Job]:
-        return (
-            db.query(Job)
-            .filter(Job.status == status)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
-```
+## Error handling
 
-**Key Principles**:
-- ✅ Extend BaseRepository for common operations
-- ✅ Add custom query methods as needed
-- ✅ Return SQLAlchemy models
-- ✅ Keep queries optimized
-- ❌ No business logic
-- ❌ No HTTP/response formatting
-
----
-
-### 4. Model Layer (`app/models/`)
-
-**Purpose**: Define database schema and relationships
-
-**Responsibilities**:
-- Define table structure
-- Define relationships
-- Set constraints and indexes
-- Provide ORM mapping
-
-**Example**:
-```python
-class Job(Base):
-    __tablename__ = "jobs"
-
-    id = Column(BigInteger, primary_key=True, autoincrement=True)
-    run_id = Column(String(36), unique=True, nullable=False, index=True)
-    status = Column(Enum(JobStatus), nullable=False, index=True)
-    # ... other columns
-```
-
-**Key Principles**:
-- ✅ Map to database tables exactly
-- ✅ Define proper indexes
-- ✅ Use appropriate data types
-- ❌ No business logic
-- ❌ No validation logic
-
----
-
-### 5. Schema Layer (`app/schemas/`)
-
-**Purpose**: Define API contracts and validation
-
-**Responsibilities**:
-- Request validation
-- Response formatting
-- Data type enforcement
-- Documentation
-
-**Example**:
-```python
-class JobCreate(BaseModel):
-    trigger_type: str
-    job_type: str
-    job_metadata: Optional[dict] = None
-
-class JobResponse(BaseModel):
-    id: int
-    run_id: str
-    status: JobStatus
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-```
-
-**Key Principles**:
-- ✅ Use Pydantic models
-- ✅ Separate Create/Update/Response schemas
-- ✅ Add validation rules
-- ✅ Enable ORM mode for responses
-
----
-
-### 6. Machine Learning Layer (`app/machine_learning/`)
-
-**Purpose**: Handle data preprocessing and ML model predictions
-
-**Responsibilities**:
-- Data aggregation and transformation
-- Feature engineering
-- Model loading and inference
-- Prediction logic
-
-**Example**:
-```python
-# app/machine_learning/preprocessing/cleaning.py
-def clean_weather_data(raw_data):
-    """Clean and validate weather data"""
-    # Remove outliers, handle missing values
-    return cleaned_data
-
-def aggregate_daily_to_monthly(daily_records):
-    """Aggregate daily weather data to monthly statistics"""
-    # Aggregation logic
-    return monthly_data
-
-# app/machine_learning/forecasting/model_manager.py
-import pickle
-
-class ModelManager:
-    def __init__(self, model_path):
-        self.model_path = model_path
-        self.model = None
-
-    def load_model(self):
-        """Load trained forecast model"""
-        with open(self.model_path, 'rb') as f:
-            self.model = pickle.load(f)
-        return self.model
-
-    def predict(self, features):
-        """Generate weather forecast predictions"""
-        if not self.model:
-            self.load_model()
-        return self.model.predict(features)
-```
-
-**Usage in Service Layer**:
-```python
-from app.machine_learning.preprocessing.cleaning import clean_weather_data, aggregate_daily_to_monthly
-from app.machine_learning.forecasting.model_manager import ModelManager
-
-class ForecastService:
-    def __init__(self):
-        self.model_manager = ModelManager('models/forecast.pkl')
-
-    def generate_forecast(self, db, request):
-        # Fetch data from repository
-        daily_data = self.weather_daily_repository.get_by_filters(...)
-
-        # Preprocess using ML layer
-        cleaned_data = clean_weather_data(daily_data)
-        monthly_data = aggregate_daily_to_monthly(cleaned_data)
-
-        # Predict using ML layer
-        predictions = self.model_manager.predict(monthly_data)
-
-        # Store results via repository
-        self.forecast_repository.create(...)
-```
-
-**Key Principles**:
-- ✅ Pure functions (no database access)
-- ✅ Reusable ML logic
-- ✅ Separate from business logic (services orchestrate)
-- ✅ Store trained models in `models/` directory
-- ❌ No direct API access
-- ❌ No database queries
-
----
-
-## Data Flow
-
-### Request Flow (Create Operation)
-
-```
-1. Client sends POST request
-   ↓
-2. FastAPI endpoint receives request
-   ↓
-3. Pydantic validates request body (JobCreate schema)
-   ↓
-4. Endpoint calls service.create_job()
-   ↓
-5. Service adds business logic (generate run_id, set status)
-   ↓
-6. Service calls repository.create()
-   ↓
-7. Repository creates SQLAlchemy model instance
-   ↓
-8. Repository commits to database
-   ↓
-9. Repository returns SQLAlchemy model
-   ↓
-10. Service converts to Pydantic schema (JobResponse)
-   ↓
-11. Endpoint returns JobResponse
-   ↓
-12. FastAPI serializes to JSON
-   ↓
-13. Client receives response
-```
-
-### Query Flow (Read Operation)
-
-```
-1. Client sends GET request with filters
-   ↓
-2. FastAPI endpoint receives request
-   ↓
-3. Pydantic validates query parameters
-   ↓
-4. Endpoint calls service.get_records(filters)
-   ↓
-5. Service calls repository.get_by_filters()
-   ↓
-6. Repository builds SQLAlchemy query
-   ↓
-7. Repository executes query on database
-   ↓
-8. Repository returns list of SQLAlchemy models
-   ↓
-9. Service converts to list of Pydantic schemas
-   ↓
-10. Endpoint returns list of schemas
-   ↓
-11. FastAPI serializes to JSON
-   ↓
-12. Client receives response
-```
-
----
-
-## Design Patterns
-
-### 1. Repository Pattern
-
-**Purpose**: Separate data access logic from business logic
-
-**Benefits**:
-- Easy to test (mock repositories)
-- Swappable data sources
-- Centralized query logic
-- Reduced code duplication
-
-**Implementation**:
-- `BaseRepository<T>` - Generic CRUD operations
-- Specific repositories extend BaseRepository
-- Custom query methods in specific repositories
-
-### 2. Service Layer Pattern
-
-**Purpose**: Encapsulate business logic
-
-**Benefits**:
-- Reusable business logic
-- Testable without HTTP layer
-- Can orchestrate multiple repositories
-- Clear separation of concerns
-
-**Implementation**:
-- One service per domain entity
-- Services use repositories via dependency injection
-- Services return Pydantic schemas
-
-### 3. Dependency Injection
-
-**Purpose**: Manage dependencies and improve testability
-
-**Benefits**:
-- Loose coupling
-- Easy to mock in tests
-- Clear dependencies
-
-**Implementation**:
-```python
-# Database session injection
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# Usage in endpoints
-@router.get("/jobs/{job_id}")
-def get_job(job_id: int, db: Session = Depends(get_db)):
-    return job_service.get_job(db, job_id)
-```
-
----
-
-## Project Structure Details
-
-```
-weather-forecaster/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                            # FastAPI app initialization
-│   │
-│   ├── core/                              # Core functionality
-│   │   ├── __init__.py
-│   │   ├── config.py                      # Settings management (Pydantic)
-│   │   └── database.py                    # Database connection & session
-│   │
-│   ├── api/                               # API layer
-│   │   ├── __init__.py
-│   │   └── v1/                            # API version 1
-│   │       ├── __init__.py
-│   │       ├── router.py                  # Aggregate all v1 routes
-│   │       └── endpoints/                 # Individual route modules
-│   │           ├── __init__.py
-│   │           └── forecast.py            # Forecast generation endpoint
-│   │
-│   ├── models/                            # SQLAlchemy models (Database layer)
-│   │   ├── __init__.py
-│   │   ├── job.py
-│   │   ├── weather_daily_record.py
-│   │   ├── weather_monthly_results.py
-│   │   └── forecast_monthly_record.py
-│   │
-│   ├── schemas/                           # Pydantic schemas (Validation layer)
-│   │   ├── __init__.py
-│   │   ├── forecast.py                    # Forecast request/response schemas
-│   │   ├── forecast_monthly.py
-│   │   ├── job.py
-│   │   ├── weather_daily.py
-│   │   └── weather_monthly.py
-│   │
-│   ├── repositories/                      # Data access layer
-│   │   ├── __init__.py
-│   │   ├── base.py                        # BaseRepository with CRUD
-│   │   ├── job.py
-│   │   ├── weather_daily_record.py
-│   │   ├── weather_monthly_record.py
-│   │   └── forecast_monthly_result.py
-│   │
-│   ├── machine_learning/                  # Machine learning layer
-│   │   ├── __init__.py
-│   │   ├── preprocessing/                 # Data preprocessing package
-│   │   │   ├── __init__.py
-│   │   │   └── cleaning.py               # Data cleaning functions
-│   │   └── forecasting/                   # Forecasting package
-│   │       ├── __init__.py
-│   │       └── model_manager.py          # Model loading & inference
-│   │
-│   └── services/                          # Business logic layer
-│       ├── __init__.py
-│       └── forecast.py                    # Forecast generation service
-│
-├── tests/                                 # Test directory
-├── alembic/                               # Database migrations
-├── Makefile                               # Make commands (run, dev, etc.)
-├── requirements.txt                       # Python dependencies
-├── .env                                   # Environment variables (not in git)
-├── .env.example                           # Environment template
-├── .gitignore                             # Git ignore rules
-├── README.md                              # Project documentation
-└── ARCHITECTURE.md                        # This file
-```
-
----
-
-## Configuration Management
-
-### Environment Variables (`.env`)
-
-```bash
-# Application
-APP_NAME=Weather Forecaster API
-APP_VERSION=1.0.0
-DEBUG=False
-
-# Database
-DATABASE_URL=mysql+pymysql://user:pass@localhost:3306/weather_db
-
-# CORS
-CORS_ORIGINS=http://localhost:3000
-```
-
-### Settings (`app/core/config.py`)
-
-Uses `pydantic-settings` for type-safe configuration:
-
-```python
-class Settings(BaseSettings):
-    APP_NAME: str = "Weather Forecaster API"
-    DATABASE_URL: str
-    CORS_ORIGINS: list[str] = ["*"]
-
-    class Config:
-        env_file = ".env"
-```
-
----
-
-## Database Design
-
-### Schema Relationships
-
-```
-jobs (1) ──────┬─────> (N) weather_monthly_records
-               │              (via run_id)
-               │
-               └─────> (N) forecast_monthly_results
-                              (via run_id)
-
-weather_daily_records (independent table)
-```
-
-### Key Design Decisions
-
-1. **`run_id` as UUID** - Globally unique job identifier
-2. **Foreign Keys** - Maintain referential integrity
-3. **Indexes** - Optimize common query patterns
-4. **Enums** - Type-safe status values
-5. **Timestamps** - Auto-managed created_at/updated_at
-
----
-
-## API Design
-
-### Versioning Strategy
-
-- Base path: `/api/v1`
-- Future versions: `/api/v2`, `/api/v3`
-- Allows breaking changes without affecting existing clients
-
-### Endpoint Patterns
-
-```
-Resource-based URLs:
-GET    /api/v1/jobs              - List jobs
-POST   /api/v1/jobs              - Create job
-GET    /api/v1/jobs/{id}         - Get specific job
-PATCH  /api/v1/jobs/{id}         - Update job
-DELETE /api/v1/jobs/{id}         - Delete job (if needed)
-
-Bulk operations:
-POST   /api/v1/weather-daily/bulk - Bulk create
-
-Custom queries:
-GET    /api/v1/jobs/run/{run_id}  - Get by alternate key
-```
-
-### Response Standards
+All application errors derive from `AppError` (`status_code`, `error_code`, `message`, `details`). Global handlers in `app/core/error_handlers.py` return:
 
 ```json
-// Success response
-{
-  "id": 1,
-  "run_id": "uuid-here",
-  "status": "SUCCESS",
-  "created_at": "2025-01-23T10:00:00"
-}
-
-// Error response (FastAPI default)
-{
-  "detail": "Job not found"
-}
+{ "error_code": "NOT_FOUND", "message": "Job not found", "details": {"job_id": 1} }
 ```
 
----
+Request validation errors, SQLAlchemy errors, and unhandled exceptions use the same shape and never leak internals.
 
-## Testing Strategy
+## Configuration
 
-### Unit Tests
+`.env` loaded by `pydantic-settings` (`app/core/config.py`). Template: `.env.example`. Required: `DATABASE_URL`, `AWS_S3_BUCKET_NAME`.
 
-```python
-# Test service layer
-def test_create_job():
-    mock_repo = Mock()
-    service = JobService(repository=mock_repo)
-    result = service.create_job(db, job_data)
-    assert result.status == JobStatus.PENDING
+## Project structure
 
-# Test repository layer
-def test_get_by_run_id():
-    job = job_repository.get_by_run_id(db, "uuid")
-    assert job.run_id == "uuid"
+```
+.
+├── app/
+│   ├── main.py
+│   ├── api/v1/{router.py, endpoints/{jobs.py, tasks.py}}
+│   ├── constants/jobs.py
+│   ├── core/{config, container, database, decorators, error_handlers, exceptions, logging, middleware}.py
+│   ├── infrastructure/adapters/{s3, job_queue, webhook_client}.py
+│   ├── machine_learning/{preprocessing, feature_engineering, training, inference, evaluation_metrics, postprocessing}/
+│   ├── models/{job, job_heartbeat}.py
+│   ├── repositories/{base, job, job_heartbeat}.py
+│   ├── schemas/{error, task}.py
+│   └── services/{job, task}.py
+├── migrations/                      # Alembic; initial schema = jobs, job_heartbeats
+├── tests/{unit,integration,e2e,fixtures}/
+├── docs/JOB_LIFECYCLE.md
+├── .github/workflows/               # deployment templates
+├── .claude/                         # skills and commands
+├── Dockerfile · compose.server.yaml · docker-compose.test.yml · Makefile
+└── requirements.txt · requirements-dev.txt · pytest.ini · .env.example
 ```
 
-### Integration Tests
+## Testing
 
-```python
-# Test full API flow
-def test_create_job_endpoint():
-    response = client.post("/api/v1/jobs", json={...})
-    assert response.status_code == 201
-```
+- **Repository tests** run against real MySQL 8 (`make test-db-up`, port 3307) with SAVEPOINT isolation, so repositories can call `db.commit()` and each test still starts clean. SQLite is not used.
+- **Service tests** mock repositories and adapters.
+- **Endpoint tests** override container providers and the `get_db` dependency; the `client` fixture does not run the lifespan.
+- **Infrastructure tests** cover the job queue and webhook client without a database.
+- Markers: `unit`, `integration`, `e2e`, `slow`, `ml`, `external`.
 
----
+## Known limitations
 
-## Scalability Considerations
+These are deliberate simplifications; revisit them before relying on the scaffold at scale.
 
-### Current Design Supports
+| Limitation | Consequence | Direction |
+|---|---|---|
+| Queue is in-memory and single-threaded | Not durable; one job at a time; restart marks unfinished jobs `FAILED` (not re-queued) | DB-backed queue (`SELECT … FOR UPDATE SKIP LOCKED`) in a separate worker process |
+| Queue + scheduler are per-process | Run **one** uvicorn worker; `--workers N` gives N queues and N sweepers | Separate API and worker processes |
+| Jobs run inside the API process | A memory blowup or GIL-heavy training can slow or take down the API | Run each job in a subprocess with a timeout, or a dedicated worker |
+| Heartbeat runs in its own thread (see `_start_heartbeat` TODO) | A job whose thread hangs while the process stays alive keeps heartbeating and is **not** flagged stale | Record progress at stage boundaries, or enforce a subprocess timeout |
+| No authentication in the service | Anyone who can reach it can queue jobs | Network restriction / gateway, or an API-key dependency; set `CORS_ORIGINS` explicitly (defaults to `*`) |
+| ML purity is by convention | Easy to drift | Review for infrastructure imports in `app/machine_learning/` |
 
-1. **Horizontal Scaling** - Stateless API servers
-2. **Database Connection Pooling** - Configured in `database.py`
-3. **Async Support** - Can add async/await in future
-4. **Caching Layer** - Easy to add Redis for services
-5. **Load Balancing** - Multiple uvicorn instances
+## Extending
 
-### Future Enhancements
-
-- **Async/Await** - For better concurrency
-- **Background Tasks** - Celery for long-running jobs
-- **API Rate Limiting** - Protect against abuse
-- **Monitoring** - Prometheus metrics
-- **Logging** - Structured logging with correlation IDs
-- **Authentication** - JWT tokens
-- **Authorization** - Role-based access control
-
----
-
-## Best Practices Applied
-
-### Code Organization
-
-✅ Separation of concerns
-✅ Single responsibility principle
-✅ Dependency injection
-✅ Type hints throughout
-✅ Consistent naming conventions
-
-### Database
-
-✅ Connection pooling
-✅ Proper indexing
-✅ Foreign key constraints
-✅ Optimistic locking with updated_at
-
-### API
-
-✅ RESTful design
-✅ Proper HTTP status codes
-✅ Request/response validation
-✅ API versioning
-✅ Auto-generated documentation (Swagger)
-
-### Error Handling
-
-✅ HTTP exceptions in endpoints
-✅ Database constraint errors
-✅ Validation errors (Pydantic)
-✅ Clear error messages
-
----
-
-## References
-
-This architecture is based on industry best practices:
-
-1. [FastAPI Best Practices](https://github.com/zhanymkanov/fastapi-best-practices)
-2. [Repository Pattern in Python](https://medium.com/@kmuhsinn/the-repository-pattern-in-python-write-flexible-testable-code-with-fastapi-examples-aa0105e40776)
-3. [Service Layer Pattern](https://mpuig.github.io/Notes/fastapi_basics/04.service_layer_pattern/)
-4. [Clean Architecture Principles](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-
----
-
-## Maintenance & Development
-
-### Adding a New Entity
-
-1. Create model in `app/models/`
-2. Create schemas in `app/schemas/`
-3. Create repository in `app/repositories/`
-4. Create service in `app/services/`
-5. Create endpoints in `app/api/v1/endpoints/`
-6. Register router in `app/api/v1/router.py`
-
-### Modifying Existing Entity
-
-1. Update model if schema changes
-2. Update schemas for new fields
-3. Update repository for new queries
-4. Update service for new business logic
-5. Update/add endpoints as needed
-
----
-
-## Conclusion
-
-This architecture provides:
-
-- **Maintainability** - Clear structure, easy to navigate
-- **Testability** - Each layer can be tested independently
-- **Scalability** - Can handle growth in traffic and features
-- **Flexibility** - Easy to swap implementations
-- **Developer Experience** - Clear patterns, good documentation
+- **New entity / new background job:** see [CLAUDE.md](CLAUDE.md) ("Adding New Entity", "Adding a New Background Job").
+- **New adapter:** add a class under `app/infrastructure/adapters/`, export it in `__init__.py`, register it as a `Singleton` in the container.
+- **New ML stage code:** add modules under the matching `app/machine_learning/<stage>/` package as pure functions; orchestrate from a service.

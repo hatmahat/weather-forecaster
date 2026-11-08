@@ -1,21 +1,13 @@
 from sqlalchemy import Column, BigInteger, String, DateTime, Integer, Enum, Text, JSON
 from sqlalchemy.sql import func
 from app.core.database import Base
-import enum
-
-
-class JobStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    IN_PROGRESS = "IN_PROGRESS"
-    SUCCESS = "SUCCESS"
-    FAILED = "FAILED"
+from app.constants.jobs import JobStatus  # single source of truth (re-exported for repositories)
 
 
 class Job(Base):
     __tablename__ = "jobs"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    run_id = Column(String(36), unique=True, nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, server_default=func.current_timestamp())
     updated_at = Column(DateTime, nullable=False, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
     trigger_user_id = Column(Integer, nullable=True)

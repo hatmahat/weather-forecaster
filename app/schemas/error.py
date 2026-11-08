@@ -4,21 +4,32 @@ Error response schemas for API error handling.
 Provides standardized error response format.
 """
 from typing import Any, Dict, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ErrorDetail(BaseModel):
     """Additional error details."""
 
+    model_config = ConfigDict(extra="allow")
+
     field: Optional[str] = Field(None, description="Field name if applicable")
     message: Optional[str] = Field(None, description="Detailed error message")
-
-    class Config:
-        extra = "allow"
 
 
 class ErrorResponse(BaseModel):
     """Standardized error response format."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "error_code": "NOT_FOUND",
+                "message": "Job not found",
+                "details": {
+                    "job_id": 123
+                }
+            }
+        }
+    )
 
     error_code: str = Field(..., description="Machine-readable error code")
     message: str = Field(..., description="Human-readable error message")
@@ -26,14 +37,3 @@ class ErrorResponse(BaseModel):
         None,
         description="Additional context about the error"
     )
-
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "error_code": "NOT_FOUND",
-                "message": "Job not found",
-                "details": {
-                    "run_id": "abc123"
-                }
-            }
-        }

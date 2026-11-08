@@ -1,0 +1,25 @@
+# Production/staging deployment compose file (used on the target host by the deploy workflow).
+# Required env vars: ECR_REGISTRY, ECR_REPOSITORY, IMAGE_TAG
+# Optional: SERVICE_NAME (default ml-service), CONTAINER_NAME, HOST_PORT, AWS_LOG_REGION
+services:
+  app:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+    container_name: ${CONTAINER_NAME:-ml-service}
+    logging:
+      driver: awslogs
+      options:
+        awslogs-group: ${SERVICE_NAME:-ml-service}
+        awslogs-region: ${AWS_LOG_REGION:-us-east-1}
+        awslogs-stream: ${SERVICE_NAME:-ml-service}-${HOSTNAME}
+        awslogs-create-group: 'true'
+    env_file:
+      - .env
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    restart: always
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

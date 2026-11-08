@@ -1,175 +1,78 @@
-# Weather Forecaster API
+# ML Service Scaffold
 
-A scalable FastAPI-based weather forecasting inference system with clean architecture.
+A FastAPI scaffold for ML / data services that run long jobs in the background. It gives you a layered architecture, dependency injection, a DB-backed job lifecycle with an in-process queue, structured logging and errors, migrations, Docker, CI templates, and a test setup. Everything domain-specific is left for you to add.
 
 ## Features
 
-- **RESTful API** with FastAPI
-- **Clean Architecture** (Repository Pattern + Service Layer)
-- **MySQL 8.0** database support
-- **API Versioning** (/api/v1)
-- **Pydantic** validation
-- **SQLAlchemy** ORM
+- **FastAPI** with API versioning (`/api/v1`) and Pydantic validation
+- **Layered architecture**: endpoint → service → repository → model
+- **Dependency injection** (`dependency-injector`) with one container
+- **Async jobs**: HTTP 202 + `job_id`, status polling, in-process single-threaded queue
+- **Job recovery**: startup recovery of stuck jobs and a periodic stale-job sweep
+- **Webhook** on job completion (retries, never fails the job)
+- **ML layer** with stage packages (preprocessing → feature engineering → training → inference → evaluation → postprocessing)
+- **MySQL 8** + SQLAlchemy 2 + Alembic migrations
+- **S3 adapter**, structured JSON logging, typed errors with a uniform error response
+- **Docker** (optional PyTorch CPU/CUDA build args), compose files, GitHub deployment workflow templates
+- **pytest** setup with MySQL SAVEPOINT isolation
 
-## Project Structure
+## Quick start
 
-```
-weather-forecaster/
-├── app/
-│   ├── main.py                        # FastAPI app entry point
-│   ├── core/
-│   │   ├── config.py                  # Settings, env vars
-│   │   └── database.py                # DB connection
-│   ├── api/v1/
-│   │   ├── router.py                  # API router
-│   │   └── endpoints/
-│   │       └── forecast.py            # Forecast endpoint
-│   ├── models/                        # SQLAlchemy models
-│   │   ├── job.py
-│   │   ├── weather_daily_record.py
-│   │   ├── weather_monthly_results.py
-│   │   └── forecast_monthly_record.py
-│   ├── schemas/                       # Pydantic schemas
-│   │   ├── forecast.py
-│   │   ├── forecast_monthly.py
-│   │   ├── job.py
-│   │   ├── weather_daily.py
-│   │   └── weather_monthly.py
-│   ├── repositories/                  # Data access layer
-│   │   ├── base.py
-│   │   ├── job.py
-│   │   ├── weather_daily_record.py
-│   │   ├── weather_monthly_record.py
-│   │   └── forecast_monthly_result.py
-│   ├── services/                      # Business logic layer
-│   │   └── forecast.py
-│   └── machine_learning/              # ML layer
-│       ├── preprocessing/
-│       │   ├── aggregation.py
-│       │   └── cleaning.py
-│       └── forecasting/
-│           ├── model_manager.py
-│           └── predictions_mapper.py
-├── experimental/                      # Experimental scripts
-│   ├── analysis.py
-│   ├── cleanse_data.py
-│   ├── config.py
-│   ├── connection.py
-│   ├── function_forecast.py
-│   ├── function_main.py
-│   ├── handle_outlier.py
-│   ├── logger_config.py
-│   ├── models.py
-│   └── stats_test.py
-├── archive/                           # Archived files
-│   └── api_server.py
-├── models/                            # Pre-trained ML models (.pkl files)
-├── logs/                              # Application logs
-├── Makefile
-├── requirements.txt
-├── LICENSE
-└── ARCHITECTURE.md
-```
-
-## Setup
-
-1. **Create and activate virtual environment:**
-   ```bash
-   # Create virtual environment
-   python3 -m venv venv
-
-   # Activate virtual environment
-   # On macOS/Linux:
-   source venv/bin/activate
-
-   # On Windows:
-   venv\Scripts\activate
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   make install
-   ```
-
-3. **Configure environment:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your database credentials
-   ```
-
-4. **Run the application:**
-   ```bash
-   # Production mode
-   make server
-
-   # Development mode (with auto-reload)
-   make server-dev
-   ```
-
-5. **Open Swagger UI:**
-
-   Visit http://localhost:8000/docs in your browser to explore and test all API endpoints interactively.
-
-   Alternative: http://localhost:8000/redoc for ReDoc documentation.
-
-## API Endpoints
-
-### Core Endpoints
-- `GET /` - Root endpoint (API info)
-- `GET /health` - Health check
-
-### Forecast Generation
-- `POST /api/v1/forecast` - Trigger forecast generation workflow
-  - **Request Body:**
-    ```json
-    {
-      "run_id": "uuid-string",
-      "models": [
-         "ARIMA",
-         "TCN",
-         "TFT",
-         "XGBoost"
-      ]
-    }
-    ```
-  - **Response:**
-    ```json
-    {
-      "run_id": "uuid-string",
-      "status": "SUCCESS",
-      "message": "Forecast generation completed successfully"
-    }
-    ```
-
-## Database Schema
-
-The application uses the following tables:
-- `jobs` - Job tracking and management
-- `weather_daily_records` - Daily weather observations
-- `weather_monthly_records` - Monthly weather aggregations
-- `forecast_monthly_results` - Monthly forecast predictions
-
-## Architecture
-
-The project follows clean architecture principles:
-
-1. **API Layer** (endpoints) - HTTP request/response handling
-2. **Service Layer** - Business logic and orchestration
-3. **Repository Layer** - Data access and persistence
-4. **Model Layer** - Database entities (SQLAlchemy)
-5. **Schema Layer** - Request/response validation (Pydantic)
-
-## Development
-
-Run with auto-reload:
 ```bash
-make server-dev
+cp .env.example .env            # set DATABASE_URL and AWS_S3_BUCKET_NAME at minimum
+make install-dev                # Python 3.12
+make migrate-up                 # create the jobs tables
+make server-dev                 # http://localhost:8000/docs
 ```
 
-## Available Make Commands
+Try the example async job:
 
-- `make help` - Show available commands
-- `make install` - Install dependencies
-- `make server` - Run the application (production mode)
-- `make server-dev` - Run with auto-reload (development mode)
-- `make clean` - Remove Python cache files
+```bash
+curl -X POST localhost:8000/api/v1/tasks -H 'Content-Type: application/json' -d '{"payload": {"hello": "world"}}'
+# -> 202 {"job_id": 1, "status": "PENDING", ...}
+curl localhost:8000/api/v1/jobs/1
+# -> {"job_id": 1, "status": "SUCCESS", ...}
+```
+
+## Project structure
+
+```
+app/
+├── main.py                    # App factory, lifespan (startup recovery, scheduler), wiring
+├── api/v1/                    # Router + endpoints (jobs, tasks)
+├── services/                  # Business logic (job, task)
+├── repositories/              # Data access (base, job, job_heartbeat)
+├── models/                    # SQLAlchemy models (job, job_heartbeat)
+├── schemas/                   # Pydantic schemas (error, task)
+├── constants/                 # Enums and constants by topic
+├── infrastructure/adapters/   # s3, job_queue, webhook_client
+├── core/                      # config, container, database, decorators, logging, middleware, errors
+└── machine_learning/          # Pure-function ML stages (empty, add yours)
+migrations/                    # Alembic (initial: jobs, job_heartbeats)
+tests/                         # unit/{core,endpoints,infrastructure,repositories,schemas,services,ml}
+docs/                          # JOB_LIFECYCLE.md
+.github/workflows/             # Deployment templates (fill in YOUR_* placeholders)
+.claude/                       # Claude Code skills and commands
+```
+
+## Common commands
+
+| Command | What it does |
+|---|---|
+| `make server-dev` | Run with auto-reload |
+| `make test-db-up` / `make test-unit` / `make test-db-down` | Start test DB, run unit tests, stop DB |
+| `make migrate-new MSG='add widgets'` | New migration |
+| `make migrate-up` / `make migrate-down` | Apply / roll back |
+| `make docker-build` | Build the image |
+
+Run `make help` for the full list.
+
+## Adding your own features
+
+See **Adding New Entity** and **Adding a New Background Job** in [CLAUDE.md](CLAUDE.md). `app/services/task.py` is the reference implementation: copy it, rename it, replace the body of `run_task`, and delete the example when you no longer need it.
+
+## Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): layers, DI, jobs, ML contract, limitations
+- [docs/JOB_LIFECYCLE.md](docs/JOB_LIFECYCLE.md): job states, queue, recovery
+- [CLAUDE.md](CLAUDE.md): conventions and commands for Claude Code

@@ -16,10 +16,13 @@ class BaseRepository(Generic[ModelType]):
         return db.query(self.model).filter(self.model.id == id).first()
 
     def get_multi(
-        self, db: Session, *, skip: int = 0, limit: int = 100
+        self, db: Session, *, skip: int = 0, limit: Optional[int] = 100
     ) -> List[ModelType]:
-        """Get multiple records with pagination"""
-        return db.query(self.model).offset(skip).limit(limit).all()
+        """Get multiple records with pagination (limit=None for all records)"""
+        query = db.query(self.model).offset(skip)
+        if limit is not None:
+            query = query.limit(limit)
+        return query.all()
 
     def create(self, db: Session, *, obj_in: dict) -> ModelType:
         """Create a new record"""
@@ -60,5 +63,5 @@ class BaseRepository(Generic[ModelType]):
 
         db_objs = [self.model(**obj_in) for obj_in in objs_in]
         db.add_all(db_objs)
-        db.flush()  # Flush without committing - let caller control transaction
+        db.flush()
         return len(db_objs)

@@ -1,0 +1,54 @@
+# TEMPLATE: replace every YOUR_* placeholder before use.
+#
+# Release flow: tag `vX.Y.Z` -> validate tag -> build & push image -> deploy to the host.
+# The three `uses:` references point at reusable workflows that live in a shared
+# workflows repository in your organization (validate tag / build+push / deploy).
+# Swap them for your own, or inline the steps.
+#
+# Required repository secrets: AWS_ACCOUNT_ID, AWS_IAM_ROLE_ARN
+# Optional repository variables: INSTALL_TORCH, USE_GPU (Dockerfile build args)
+name: Production Deployment
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - '!v*.*.*-*'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate:
+    uses: YOUR_ORG/YOUR_WORKFLOWS_REPO/.github/workflows/validate-release-tag.yaml@main
+    with:
+      tag: ${{ github.ref_name }}
+
+  build:
+    needs: validate
+    uses: YOUR_ORG/YOUR_WORKFLOWS_REPO/.github/workflows/build-push.yaml@main
+    with:
+      image_tag: ${{ github.ref_name }}
+      ecr_repository: YOUR_ECR_REPOSITORY
+      aws_region: YOUR_AWS_REGION
+      environment: prod
+    secrets:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_IAM_ROLE_ARN: ${{ secrets.AWS_IAM_ROLE_ARN }}
+      DOCKER_BUILD_ARGS_BLOB: |
+        --build-arg INSTALL_TORCH="${{ vars.INSTALL_TORCH }}"
+        --build-arg USE_GPU="${{ vars.USE_GPU }}"
+
+  deploy:
+    needs: build
+    uses: YOUR_ORG/YOUR_WORKFLOWS_REPO/.github/workflows/deploy-ec2.yaml@main
+    with:
+      image_tag: ${{ github.ref_name }}
+      ecr_repository: YOUR_ECR_REPOSITORY
+      aws_region: YOUR_AWS_REGION
+      environment: prod
+      deploy_path: /opt/apps/YOUR_APP_DIR
+      target_tag_key: Name
+      target_tag_value: YOUR_EC2_NAME_TAG_PROD
+    secrets: inherit

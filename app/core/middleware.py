@@ -14,6 +14,10 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         """Log request and response details."""
+        # Skip logging for health check endpoint
+        if request.url.path == "/health":
+            return await call_next(request)
+
         start_time = time.time()
 
         # Log incoming request

@@ -1,12 +1,14 @@
 """
-Custom exceptions for the Weather Forecaster API.
+Custom exceptions for the application.
 
-Provides domain-specific exceptions with proper HTTP status codes.
+Provides typed exceptions with HTTP status codes and machine-readable error codes.
+Services raise these (never ``HTTPException``); the global handlers in
+``app/core/error_handlers.py`` convert them to the standard error response.
 """
 from typing import Any, Dict, Optional
 
 
-class WeatherForecastError(Exception):
+class AppError(Exception):
     """Base exception for all application errors."""
 
     def __init__(
@@ -23,7 +25,7 @@ class WeatherForecastError(Exception):
         super().__init__(self.message)
 
 
-class NotFoundError(WeatherForecastError):
+class NotFoundError(AppError):
     """Raised when a requested resource is not found."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
@@ -35,7 +37,7 @@ class NotFoundError(WeatherForecastError):
         )
 
 
-class ValidationError(WeatherForecastError):
+class ValidationError(AppError):
     """Raised when input validation fails."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
@@ -47,7 +49,7 @@ class ValidationError(WeatherForecastError):
         )
 
 
-class BusinessLogicError(WeatherForecastError):
+class BusinessLogicError(AppError):
     """Raised when business logic constraints are violated."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
@@ -59,7 +61,7 @@ class BusinessLogicError(WeatherForecastError):
         )
 
 
-class DatabaseError(WeatherForecastError):
+class DatabaseError(AppError):
     """Raised when database operations fail."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
@@ -72,26 +74,22 @@ class DatabaseError(WeatherForecastError):
 
 
 class ModelNotFoundError(NotFoundError):
-    """Raised when ML model files are not found."""
+    """Raised when a trained model artifact cannot be found."""
 
-    def __init__(self, site: str, target: str, model_type: str):
+    def __init__(self, model_name: str, model_type: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(
-            message=f"Model not found for site '{site}' and target '{target}'",
-            details={
-                "site": site,
-                "target": target,
-                "model_type": model_type
-            }
+            message=f"Model not found: '{model_name}' ({model_type})",
+            details={"model_name": model_name, "model_type": model_type, **(details or {})}
         )
 
 
 class JobNotFoundError(NotFoundError):
-    """Raised when a job with the specified run_id is not found."""
+    """Raised when a job with the specified job_id is not found."""
 
-    def __init__(self, run_id: str):
+    def __init__(self, job_id: int):
         super().__init__(
-            message=f"Job not found",
-            details={"run_id": run_id}
+            message="Job not found",
+            details={"job_id": job_id}
         )
 
 
@@ -102,8 +100,8 @@ class NoDataError(BusinessLogicError):
         super().__init__(message=message, details=details)
 
 
-class PredictionError(WeatherForecastError):
-    """Raised when prediction/forecasting fails."""
+class PredictionError(AppError):
+    """Raised when inference/prediction fails."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(

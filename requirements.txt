@@ -2,15 +2,29 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy==2.0.36
+alembic==1.14.0
 pymysql==1.1.1
 cryptography==44.0.0
 pydantic==2.10.5
 pydantic-settings==2.7.1
 python-dotenv==1.0.1
+dependency-injector==4.42.0
+apscheduler==3.10.4
+httpx==0.28.1
 
-# Machine Learning & Forecasting
+# Machine Learning (core)
 pandas==2.2.3
-numpy==1.26.4
-darts==0.37.1
-xgboost==2.1.4
-scikit-learn==1.6.1
+numpy==2.3.0
+scipy==1.16.3
+scikit-learn==1.8.0
+
+# Optional ML frameworks: uncomment what your project needs.
+# xgboost==3.2.0
+# lightgbm==4.7.0
+# darts==0.39.0
+# torch is installed separately in the Dockerfile (INSTALL_TORCH / USE_GPU build args)
+# because CPU and CUDA builds come from different package indexes.
+
+# AWS Services
+boto3==1.35.84
+botocore==1.35.84

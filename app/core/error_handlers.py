@@ -1,24 +1,24 @@
 """
-Global exception handlers for the Weather Forecaster API.
+Global exception handlers.
 
-Handles all exceptions and returns standardized error responses.
+Handles all exceptions and returns standardized error responses:
+    { "error_code": str, "message": str, "details": {} }
 """
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import SQLAlchemyError
-from pydantic import ValidationError as PydanticValidationError
 
-from app.core.exceptions import WeatherForecastError
+from app.core.exceptions import AppError
 from app.core.logging import get_logger
 from app.schemas.error import ErrorResponse
 
 logger = get_logger(__name__)
 
 
-async def weather_forecast_error_handler(
+async def app_error_handler(
     request: Request,
-    exc: WeatherForecastError
+    exc: AppError
 ) -> JSONResponse:
     """
     Handle custom application exceptions.
